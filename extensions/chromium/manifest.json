@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "herdr Browser Tab Groups",
+  "version": "0.6.3",
+  "description": "Shows the Chrome tab group of the focused herdr workspace. Companion to HerdrBrowserTabGroups.app.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage",
+    "alarms",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "herdr Browser Tab Groups — click to re-sync"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvEbGIBNUA1L+Djh4uWwFVx3WuWfYxnqfAGQQfJCofmESyVs4SjhF+vHieQislr6K5yP0KtseMs3YUeMTnijzV4HvP4JdMeD22ISCKTrRhHQXVuxu7rLjgG7Fl7hbwttqadJfsfkbhu+f6bJo8oZonxQUOYJX5SaJu0h4rF8aicpQvNiFPNACdndz+43Aw92r1nj7KSmCba7XnN09fDPxlOer35Z0Npy4IDiTYYlmHDOV9/Zz7LOQHQJAGl5vtiap7K17u0NmLtZZaYaNDh+ki4nRWrl1ifv5zh+bsXuldSriwImWRfx2DdbBixch8vKyoZVwb0jVFVu6YPcwScZKLwIDAQAB"
+}

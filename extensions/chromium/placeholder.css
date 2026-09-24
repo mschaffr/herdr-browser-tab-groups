@@ -1,0 +1,10 @@
+:root { color-scheme: light dark; --fg: #1d1d1f; --muted: #6e6e73; --bg: #f5f5f7; --card: #fff; }
+@media (prefers-color-scheme: dark) { :root { --fg: #f5f5f7; --muted: #a1a1a6; --bg: #1c1c1e; --card: #2c2c2e; } }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--fg);
+       font: 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+main { background: var(--card); padding: 40px 48px; border-radius: 16px; max-width: 560px; box-shadow: 0 8px 30px rgb(0 0 0 / .08); }
+.swatch { width: 48px; height: 8px; border-radius: 4px; background: #8ab4f8; }
+h1 { font-size: 56px; margin: 12px 0 0; letter-spacing: -0.02em; }
+.label { color: var(--muted); margin-top: 0; font-family: ui-monospace, Menlo, monospace; }
+pre { background: var(--bg); padding: 12px 16px; border-radius: 8px; overflow-x: auto; }
+.hint { color: var(--muted); font-size: 13px; }

@@ -1,0 +1,31 @@
+# herdr plugin: "Open browser" / "Close browser" actions for a space (bind them to keys; see README).
+# Link it with: herdr plugin link /path/to/herdr-browser-tab-groups/herdr-plugin
+id = "herdr-browser-tab-groups"
+name = "herdr Browser Tab Groups"
+version = "0.5.0"
+description = "Chrome tab group per herdr space (needs HerdrBrowserTabGroups.app + extension)"
+min_herdr_version = "0.8.0"
+platforms = ["macos"]
+
+# Popup the "open" action shows when the browser must be started and several profiles have the extension.
+[[panes]]
+id = "choose-profile"
+title = "Browser profile"
+placement = "popup"
+width = 52
+height = 14
+command = ["/bin/sh", "-c", "exec \"$HERDR_PLUGIN_ROOT/hbtg-action.sh\" choose-profile"]
+
+[[actions]]
+id = "browser-open"
+title = "Open browser"
+description = "Create (if needed) and show this space's Chrome tab group"
+contexts = ["workspace"]
+command = ["/bin/sh", "-c", "exec \"$HERDR_PLUGIN_ROOT/hbtg-action.sh\" open"]
+
+[[actions]]
+id = "browser-close"
+title = "Close browser"
+description = "Close all tabs in this space's Chrome tab group"
+contexts = ["workspace"]
+command = ["/bin/sh", "-c", "exec \"$HERDR_PLUGIN_ROOT/hbtg-action.sh\" close"]
