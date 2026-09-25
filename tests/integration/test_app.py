@@ -109,6 +109,37 @@ class SyncTests(AppTestCase):
             self.herdr.rename("w3", "myapp-bravo")
             self.ext.expect("rename", to="myapp-bravo")
 
+    def test_space_following_its_folder_renames_the_groups(self):
+        # A new space opened from `myapp` is named `myapp` too until you `cd` elsewhere; herdr announces
+        # neither label change with a rename event.
+        self.herdr.change_folder("w3", "myapp")
+        try:
+            renames = {m["from"]: m["to"] for m in self.ext.collect("rename", 1.0)}
+            self.assertEqual(renames, {"myapp": "myapp (w1)", "myapp-bravo": "myapp (w3)"})
+        finally:
+            self.herdr.change_folder("w3", "myapp-bravo")
+            renames = {m["from"]: m["to"] for m in self.ext.collect("rename", 1.0)}
+            self.assertEqual(renames, {"myapp (w1)": "myapp", "myapp (w3)": "myapp-bravo"}, "renamed back")
+
+    def test_pane_updates_without_a_folder_change_do_not_reread_the_spaces(self):
+        self.herdr.pane_updated("w2", "/dev/myapp-alpha")
+        time.sleep(0.6)
+        before = len(self.herdr.calls("workspace.list"))
+        for _ in range(20):
+            self.herdr.pane_updated("w2", "/dev/myapp-alpha")
+        time.sleep(0.6)
+        self.assertEqual(len(self.herdr.calls("workspace.list")), before)
+
+    def test_focus_picks_up_an_unannounced_label_change(self):
+        self.herdr.relabel("w3", "myapp-charlie")
+        try:
+            self.herdr.focus("w3")
+            msg = self.ext.expect("rename")
+            self.assertEqual((msg["from"], msg["to"]), ("myapp-bravo", "myapp-charlie"))
+        finally:
+            self.herdr.rename("w3", "myapp-bravo")
+            self.ext.expect("rename", to="myapp-bravo")
+            self.focus("w1")
 
 class CLITests(AppTestCase):
     def test_open_url_goes_to_the_spaces_group(self):
@@ -236,6 +267,18 @@ class HerdrMarkerTests(AppTestCase):
         self.assertIsNone(self.herdr.metadata.get("w3"), "no marker for spaces without a group")
         self.ext.send({"type": "state", "activeGroup": None, "groups": []})
         wait_for(lambda: self.herdr.metadata.get("w2") is None, message="marker cleared")
+
+    def test_group_left_under_a_former_title_is_renamed(self):
+        # e.g. the app restarted after `myapp-alpha` stopped sharing its label with another space.
+        self.ext.send({"type": "state", "activeGroup": None, "groups": ["myapp-alpha (w2)", "web (w5)"]})
+        try:
+            msg = self.ext.expect("rename")
+            self.assertEqual((msg["from"], msg["to"], msg["color"]), ("myapp-alpha (w2)", "myapp-alpha", "blue"))
+            wait_for(lambda: self.herdr.metadata.get("w2"), message="marker for w2")
+            self.assertEqual(self.ext.collect("rename", 0.5), [], "sent once")
+        finally:
+            self.ext.send({"type": "state", "activeGroup": None, "groups": []})
+            wait_for(lambda: self.herdr.metadata.get("w2") is None, message="marker cleared")
 
     def test_herdr_restart_resubscribes(self):
         before = self.herdr.subscribe_count

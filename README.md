@@ -130,7 +130,9 @@ if you do, run step 3 again.
   even if you created it by hand. *Close browser group* removes all tabs of that group, but only in the managed window;
   groups in other Chrome windows are never touched. Avoid naming your own tab groups exactly like a herdr space.
 - **Spaces with the same name** (identical labels, or the same `title` override) get their herdr ID appended, e.g.
-  `web (w1)` and `web (w2)`, so each space keeps its own group.
+  `web (w1)` and `web (w2)`, so each space keeps its own group. This also happens for a moment when you open a new
+  space from another one: herdr names it after its folder, so it has the same name until you `cd` elsewhere. The
+  groups get their plain names back as soon as the names differ, even if that happens while the app isn't running.
 - **Other tabs are left alone.** Tabs outside the herdr groups, and groups with other names, are never moved,
   collapsed or closed.
 

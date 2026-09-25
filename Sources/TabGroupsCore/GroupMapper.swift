@@ -90,4 +90,17 @@ public enum GroupMapper {
         }
         return result
     }
+
+    /// Renames that give groups left under a space's former disambiguated title (`X (wN)`) back to that
+    /// space, now titled `X`. The app renames groups when a title changes while it's running; this covers a
+    /// change it didn't see (label changed while the app was down). The reverse (`X` → `X (wN)`) is left
+    /// alone: with two spaces labeled `X`, nothing says which one the group `X` belonged to.
+    public static func orphanRenames(_ mappings: [GroupMapping], groups: Set<String>) -> [(from: String, to: GroupMapping)] {
+        let claimed = Set(mappings.map(\.title))
+        return mappings.compactMap { m in
+            let former = "\(m.title) (\(m.workspaceId))"
+            guard !groups.contains(m.title), groups.contains(former), !claimed.contains(former) else { return nil }
+            return (former, m)
+        }
+    }
 }

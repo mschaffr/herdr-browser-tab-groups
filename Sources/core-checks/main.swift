@@ -16,7 +16,7 @@ func ws(_ id: String, _ label: String, focused: Bool = false) -> HerdrWorkspace 
 
 print("GroupMapper.title")
 let labels = ["myapp", "myapp-alpha", "myapp-bravo", "myapp-charlie",
-              "myapp-delta", "shop-cloud", "shared-services", ".claude", "dotfiles"]
+              "myapp-delta", "shop-cloud", "docs-site", ".claude", "dotfiles"]
 check(GroupMapper.title(for: "myapp-alpha") == "myapp-alpha", "title is the full label")
 check(GroupMapper.worktreeSuffix(of: "myapp-alpha") == "alpha", "worktree suffix detected")
 check(GroupMapper.worktreeSuffix(of: "shop-cloud") == nil, "non-worktree suffix ignored")
@@ -27,8 +27,8 @@ check(GroupMapper.color(for: "alpha") == "blue", "fixed color alpha")
 check(GroupMapper.color(for: "charlie") == "orange", "fixed color charlie")
 check(GroupMapper.color(for: "myapp-alpha") == "blue" && GroupMapper.color(for: "other-app-alpha") == "blue",
       "same worktree name → same color across projects")
-let c1 = GroupMapper.color(for: "shared-services")
-check(c1 == GroupMapper.color(for: "shared-services") && c1 != "grey"
+let c1 = GroupMapper.color(for: "docs-site")
+check(c1 == GroupMapper.color(for: "docs-site") && c1 != "grey"
       && GroupMapper.chromeColors.contains(c1), "hash color stable and not grey")
 
 print("GroupMapper.mapping + Config overrides")
@@ -51,6 +51,15 @@ let dups = GroupMapper.mappings(for: [ws("w1", "web-a"), ws("w2", "web-b"), ws("
 check(dups.map(\.title) == ["web-a (w1)", "web-a (w2)", "api"], "colliding titles get the workspace id appended")
 check(Set(GroupMapper.mappings(for: all, config: config).map(\.title)).count
       == GroupMapper.mappings(for: all, config: config).count, "titles are unique")
+
+print("GroupMapper.orphanRenames")
+let spaces = GroupMapper.mappings(for: [ws("w2", "api"), ws("w7", "docs"), ws("w5", "web"), ws("w6", "web")], config: Config())
+let orphans = GroupMapper.orphanRenames(spaces, groups: ["api (w2)", "docs", "web"])
+check(orphans.map { "\($0.from)→\($0.to.title)" } == ["api (w2)→api"], "a space that lost its id suffix gets its group back")
+check(GroupMapper.orphanRenames(spaces, groups: ["api", "api (w2)"]).isEmpty, "never renames over an existing group")
+check(GroupMapper.orphanRenames(spaces, groups: ["web"]).isEmpty, "ambiguous plain title left alone")
+check(GroupMapper.orphanRenames(GroupMapper.mappings(for: [ws("w2", "api"), ws("w3", "api (w2)")], config: Config()),
+                                groups: ["api (w2)"]).isEmpty, "a group another space claims is not taken")
 
 print("GroupMapper.browserToken")
 var plain = Config()
@@ -131,6 +140,11 @@ check(HerdrEvent.parse(Data(#"{"data":{"type":"workspace_focused","workspace_id"
       == .focused(workspaceId: "wA"), "focus event")
 check(HerdrEvent.parse(Data(#"{"data":{},"event":"workspace_renamed"}"#.utf8)) == .workspacesChanged, "rename event")
 check(HerdrEvent.parse(Data(#"{"id":"s1","result":{}}"#.utf8)) == nil, "non-event ignored")
+check(HerdrEvent.parse(Data(#"{"data":{"type":"pane_updated","pane":{"pane_id":"wG:p1","cwd":"/dev/a","foreground_cwd":"/dev/b","revision":3}},"event":"pane_updated"}"#.utf8))
+      == .paneFolder(paneId: "wG:p1", folder: "/dev/a\n/dev/b"), "pane update carries the pane's folders")
+check(HerdrEvent.parse(Data(#"{"data":{"type":"pane_updated"},"event":"pane_updated"}"#.utf8)) == nil, "pane update without pane ignored")
+check(HerdrEvent.parse(Data(#"{"data":{"type":"tab_focused","tab_id":"w2:t1","workspace_id":"w2"},"event":"tab_focused"}"#.utf8))
+      == .panesChanged, "tab focus may change the naming pane")
 
 print("Bridge protocol")
 let act = String(data: AppToExtension.activate(title: "alpha", color: "blue", defaultUrls: [], label: "l", managed: ["alpha"], create: false).jsonData(), encoding: .utf8)!

@@ -93,6 +93,23 @@ class FakeHerdr:
                     w["label"] = label
         self.emit("workspace_renamed", {"type": "workspace_renamed", "workspace_id": workspace_id})
 
+    def relabel(self, workspace_id, label):
+        """Changes a label without any event, like herdr does for a space named after its folder."""
+        with self.lock:
+            for w in self.workspaces:
+                if w["workspace_id"] == workspace_id:
+                    w["label"] = label
+
+    def change_folder(self, workspace_id, label):
+        """A `cd` in a space named after its folder: the label follows, and herdr only sends pane_updated."""
+        self.relabel(workspace_id, label)
+        self.pane_updated(workspace_id, "/dev/" + label)
+
+    def pane_updated(self, workspace_id, cwd):
+        pane = {"pane_id": workspace_id + ":p1", "workspace_id": workspace_id, "cwd": cwd, "foreground_cwd": cwd,
+                "agent_status": "idle", "revision": 1}
+        self.emit("pane_updated", {"type": "pane_updated", "pane": pane})
+
     def emit(self, name, data):
         line = (json.dumps({"event": name, "data": data}) + "\n").encode()
         with self.lock:

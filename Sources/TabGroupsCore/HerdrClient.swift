@@ -27,6 +27,12 @@ public enum HerdrEvent: Equatable, Sendable {
     case focused(workspaceId: String)
     /// Workspace set or naming changed; the caller should re-list workspaces.
     case workspacesChanged
+    /// A pane's folders, as reported on creation and on every update (title, scroll, agent state…).
+    /// herdr names a space without a custom name after its folder and sends no rename event when that
+    /// changes, so a changed folder means the label may have changed too.
+    case paneFolder(paneId: String, folder: String)
+    /// Panes or tabs closed, moved or got focus: the pane a space is named after may be a different one now.
+    case panesChanged
     case other(String)
 
     /// Parses one newline-delimited event line: `{"event":"workspace_focused","data":{...}}`.
@@ -40,6 +46,12 @@ public enum HerdrEvent: Equatable, Sendable {
             return .focused(workspaceId: id)
         case "workspace_created", "workspace_closed", "workspace_renamed", "workspace_updated":
             return .workspacesChanged
+        case "pane_created", "pane_updated":
+            guard let pane = data["pane"] as? [String: Any], let id = pane["pane_id"] as? String else { return nil }
+            let folders = [pane["cwd"] as? String ?? "", pane["foreground_cwd"] as? String ?? ""]
+            return .paneFolder(paneId: id, folder: folders.joined(separator: "\n"))
+        case "pane_closed", "pane_focused", "pane_moved", "tab_closed", "tab_focused":
+            return .panesChanged
         default:
             return .other(name)
         }
@@ -193,7 +205,9 @@ public final class HerdrClient: @unchecked Sendable {
                     let sock = try LineSocket(path: self.socketPath)
                     self.lock.withLock { self.eventSocket = sock }
                     let types = ["workspace.focused", "workspace.created", "workspace.closed",
-                                 "workspace.renamed", "workspace.updated"]
+                                 "workspace.renamed", "workspace.updated",
+                                 "pane.created", "pane.updated", "pane.closed", "pane.focused", "pane.moved",
+                                 "tab.closed", "tab.focused"]
                     try sock.send([
                         "id": "hbtg:subscribe",
                         "method": "events.subscribe",
