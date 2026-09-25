@@ -22,7 +22,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var openGroups: Set<String> = []
     /// workspaceId → `$browser` token value last reported to herdr (nil = cleared).
     private var reportedBrowserToken: [String: String?] = [:]
-    private var lastActivate: AppToExtension?
     private var activateWork: DispatchWorkItem?
     private var extensionVersion: String?
     private var pendingOpens: [String: (HTTPResponse) -> Void] = [:]
@@ -32,6 +31,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Incremented per focus event: a workspace list requested before the latest event must not
     /// override that event's focus.
     private var focusEvents = 0
+    /// Set on (re)connecting to herdr: the next list sets the focus unless a focus event came first.
+    private var adoptFocusAfter: Int?
+    private var refreshWork: DispatchWorkItem?
+    /// paneId → folders last seen; a change can rename a space without a rename event.
+    private var paneFolders: [String: String] = [:]
     /// Renames that happened while no extension was connected; replayed on its next hello.
     private var pendingRenames: [AppToExtension] = []
     /// Actions waiting for the extension to connect (after the app started the browser).
@@ -132,9 +136,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func herdrConnectionChanged(_ connected: Bool) {
         herdrConnected = connected
-        // A restarted herdr server has lost our metadata; report everything again.
-        if connected { reportedBrowserToken = [:] }
-        if connected { refreshWorkspaces(adoptFocus: true) }
+        if connected {
+            // A restarted herdr server has lost our metadata; report everything again.
+            reportedBrowserToken = [:]
+            paneFolders = [:]
+            adoptFocusAfter = focusEvents
+            refreshWorkspaces()
+        }
         updateStatusTitle()
     }
 
@@ -144,32 +152,45 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             focusEvents += 1
             focusedId = id
             scheduleActivate()
+            // Safety net for label changes herdr didn't announce: a stale label mislabels groups.
+            scheduleRefresh()
         case .workspacesChanged:
-            refreshWorkspaces(adoptFocus: false)
+            refreshWorkspaces()
+        case .paneFolder(let paneId, let folder):
+            // pane_updated fires constantly (titles, scrolling, agent state); only a new folder matters.
+            if paneFolders.updateValue(folder, forKey: paneId) != folder { scheduleRefresh() }
+        case .panesChanged:
+            scheduleRefresh()
         case .other:
             break
         }
     }
 
-    private func refreshWorkspaces(adoptFocus: Bool, then completion: (() -> Void)? = nil) {
+    /// Pane events come in bursts; one list request after they settle is enough.
+    private func scheduleRefresh() {
+        refreshWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.refreshWorkspaces() }
+        refreshWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+    }
+
+    private func refreshWorkspaces(then completion: (() -> Void)? = nil) {
         let herdr = self.herdr
         refreshGeneration += 1
         let generation = refreshGeneration
-        let focusEventsAtStart = focusEvents
         DispatchQueue.global().async {
             let result = Result { try herdr.listWorkspaces() }
             DispatchQueue.main.async {
                 // Refreshes run in parallel; applying an older list after a newer one would look like a rename back.
                 if case .success(let list) = result, generation == self.refreshGeneration {
-                    // A focus event that arrived meanwhile is newer than the list's `focused` flag.
-                    self.applyWorkspaces(list, adoptFocus: adoptFocus && self.focusEvents == focusEventsAtStart)
+                    self.applyWorkspaces(list)
                 }
                 completion?()
             }
         }
     }
 
-    private func applyWorkspaces(_ list: [HerdrWorkspace], adoptFocus: Bool) {
+    private func applyWorkspaces(_ list: [HerdrWorkspace]) {
         let old = Dictionary(uniqueKeysWithValues: mappings().map { ($0.workspaceId, $0) })
         workspaces = list
         for new in mappings() {
@@ -178,11 +199,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if extensionCount > 0 { bridge?.send(rename) } else { pendingRenames.append(rename) }
             }
         }
-        if adoptFocus, let focused = list.first(where: \.focused) {
-            focusedId = focused.workspaceId
-            scheduleActivate()
+        // A focus event that arrived since connecting is newer than the list's `focused` flag.
+        if let after = adoptFocusAfter {
+            adoptFocusAfter = nil
+            if focusEvents == after, let focused = list.first(where: \.focused) {
+                focusedId = focused.workspaceId
+                scheduleActivate()
+            }
         }
-        if chromeStateKnown { syncHerdrMetadata() }
+        if chromeStateKnown {
+            adoptOrphanGroups()
+            syncHerdrMetadata()
+        }
         updateStatusTitle()
     }
 
@@ -209,9 +237,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         // Focus alone never creates a group (tabbing through spaces shouldn't spawn tabs).
-        let message = activateMessage(target, create: false)
-        lastActivate = message
-        bridge?.send(message)
+        bridge?.send(activateMessage(target, create: false))
         updateStatusTitle()
     }
 
@@ -348,6 +374,22 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Gives groups left under a space's former title back to it (see `GroupMapper.orphanRenames`).
+    private func adoptOrphanGroups() {
+        guard let bridge else { return }
+        let renames = GroupMapper.orphanRenames(mappings(), groups: openGroups)
+        for (from, to) in renames {
+            bridge.send(.rename(from: from, to: to.title, color: to.color))
+            // Assume it worked until Chrome reports back, so the next list or state doesn't send it again.
+            openGroups.remove(from)
+            openGroups.insert(to.title)
+        }
+        // Show the group now that the focused space can find it again.
+        if let focused = mapping(for: focusedId), renames.contains(where: { $0.to.workspaceId == focused.workspaceId }) {
+            activateFocused()
+        }
+    }
+
     /// Mirrors "has a browser group" into herdr as the `$browser` space-row token (cleared when there's none).
     private func syncHerdrMetadata() {
         guard herdrConnected else { return }
@@ -376,11 +418,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             for rename in pendingRenames { bridge?.send(rename) }
             pendingRenames.removeAll()
             extensionVersion = msg.version
-            if let lastActivate { bridge?.send(lastActivate) }
+            // Built from the current mapping: the space may have been renamed since the last activate.
+            activateFocused()
         case "state":
             chromeActiveGroup = msg.activeGroup
             chromeStateKnown = true
             if let groups = msg.groups { openGroups = Set(groups) }
+            adoptOrphanGroups()
             syncHerdrMetadata()
             updateStatusTitle()
         case "result":
@@ -407,7 +451,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 open(body, respond: respond)
             } else {
                 // Unknown workspace: it may have just been created; refresh once.
-                refreshWorkspaces(adoptFocus: false) { self.open(body, respond: respond) }
+                refreshWorkspaces { self.open(body, respond: respond) }
             }
         case ("POST", "/group"):
             guard let body = try? JSONDecoder().decode(GroupRequest.self, from: req.body) else {
@@ -423,7 +467,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 // On success the extension's reply answers the request (see expectResult).
                 if let error { respond(.error(error, status: error == Self.chromeNotConnected ? 503 : 400)) }
             }
-            if mapping(for: body.workspaceId) != nil { run() } else { refreshWorkspaces(adoptFocus: false, then: run) }
+            if mapping(for: body.workspaceId) != nil { run() } else { refreshWorkspaces(then: run) }
         case ("POST", "/reload-config"):
             reloadConfig()
             respond(.json(OpenResponse(ok: true)))
