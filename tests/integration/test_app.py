@@ -221,6 +221,12 @@ class CLITests(AppTestCase):
         self.ext.send({"type": "state", "activeGroup": "myapp-alpha", "groups": ["myapp", "myapp-alpha"]})
         wait_for(lambda: self.app.status()["chromeActiveGroup"] == "myapp-alpha", message="mismatch applied")
         self.assertIn("out of sync", self.cli("status").stdout)
+        # A tab outside every group is browsing in between, not a mismatch.
+        self.ext.send({"type": "state", "activeGroup": None, "groups": ["myapp", "myapp-alpha"]})
+        wait_for(lambda: self.app.status().get("chromeActiveGroup") is None, message="ungrouped applied")
+        out = self.cli("status").stdout
+        self.assertIn("Chrome shows: ungrouped", out)
+        self.assertNotIn("out of sync", out)
         self.assertEqual(json.loads(self.cli("status", "--json").stdout)["openGroups"], ["myapp", "myapp-alpha"])
 
     def test_reload_extension_and_config(self):

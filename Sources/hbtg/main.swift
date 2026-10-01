@@ -228,7 +228,7 @@ case "status":
     if s.extensionConnected, let expected = s.expectedGroup, !s.openGroups.contains(expected) {
         print("focused:   \(expected)  (no browser group — Chrome left as is)")
     } else if s.extensionConnected {
-        let synced = s.expectedGroup == s.chromeActiveGroup
+        let synced = s.chromeActiveGroup == nil || s.expectedGroup == s.chromeActiveGroup  // ungrouped tab: an aside, like the menu bar
         print("focused:   \(s.expectedGroup ?? "-")  (Chrome shows: \(s.chromeActiveGroup ?? "ungrouped"))\(synced ? "" : "  ⚠ out of sync")")
     } else {
         print("focused:   \(s.expectedGroup ?? "-")")

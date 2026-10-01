@@ -556,8 +556,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             } else if chromeStateKnown && !openGroups.contains(expected.title) {
                 // No group is a valid state (Chrome is left alone), not a mismatch.
                 text = "○ \(expected.title)"
-            } else if chromeStateKnown && chromeActiveGroup != expected.title {
-                text = "⚠︎ \(expected.title) ≠ \(chromeActiveGroup ?? "ungrouped")"
+            } else if chromeStateKnown, let active = chromeActiveGroup, active != expected.title {
+                // An ungrouped tab is an aside (browsing between tasks), not a mismatch: only another
+                // space's group is.
+                text = "⚠︎ \(expected.title) ≠ \(active)"
                 color = .systemRed
             } else {
                 text = "● \(expected.title)"

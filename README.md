@@ -28,7 +28,8 @@ agent pane: `hbtg open URL` ──HTTP──▶ 127.0.0.1   │  └─ local br
   - You use the menu bar item.
 - **herdr's space list shows `● browser`** (right-aligned) next to spaces that have a group.
 - **Mismatch warnings:** the menu bar turns red (`⚠︎ … ≠ …`) if Chrome's active tab belongs to a different space than
-  herdr's. The extension badge shows a red `!` in the same case.
+  herdr's. The extension badge shows a red `!` in the same case. Switching to a tab outside every group (other
+  browsing in between) does not turn the menu bar red; it keeps showing the space.
 
 **Works with any terminal.** The app talks to herdr itself, not to the terminal, so it works wherever you run herdr:
 Ghostty, iTerm2, Terminal.app, WezTerm, kitty, Alacritty, Warp and others. herdr must run on the same Mac; a
